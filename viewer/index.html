@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arctic land polygons — EPSG:3573</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.5.0/ol.css">
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #map { width: 100%; height: 100%; background: #0b3d59; }
+    .info {
+      position: absolute; z-index: 1; bottom: 8px; left: 8px;
+      background: rgba(255, 255, 255, .85); padding: 4px 8px;
+      font: 12px/1.4 sans-serif; border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="info">
+    EPSG:3573 (North Pole LAEA Canada) &middot;
+    Land polygons &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors,
+    via <a href="https://osmdata.openstreetmap.de/">osmdata.openstreetmap.de</a> &middot;
+    tiles by <a href="https://www.bbox.earth/">BBOX</a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.15.0/dist/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@10.5.0/dist/ol.js"></script>
+  <script>
+    // WGS 84 / North Pole LAEA Canada
+    proj4.defs('EPSG:3573',
+      '+proj=laea +lat_0=90 +lon_0=-100 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs');
+    ol.proj.proj4.register(proj4);
+
+    // Must match bbox/grids/EPSG3573Quad.json: a quadratic grid whose edge is
+    // the equator ring (radius 9009964.761231286 m around the pole).
+    const HALF = 9009964.761231286;
+    const extent = [-HALF, -HALF, HALF, HALF];
+    const resolutions = Array.from({ length: 17 }, (_, z) => (2 * HALF) / 256 / 2 ** z);
+
+    const projection = ol.proj.get('EPSG:3573');
+    projection.setExtent(extent);
+
+    const tileGrid = new ol.tilegrid.TileGrid({
+      extent: extent,
+      origin: [extent[0], extent[3]], // top-left, as in the TileMatrixSet
+      resolutions: resolutions,
+      tileSize: 256,
+    });
+
+    const landLayer = new ol.layer.VectorTile({
+      source: new ol.source.VectorTile({
+        format: new ol.format.MVT(),
+        projection: projection,
+        tileGrid: tileGrid,
+        url: '/xyz/land/{z}/{x}/{y}.pbf',
+      }),
+      style: new ol.style.Style({
+        fill: new ol.style.Fill({ color: '#e8e4d8' }),
+        stroke: new ol.style.Stroke({ color: '#b0a98f', width: 0.6 }),
+      }),
+    });
+
+    const graticule = new ol.layer.Graticule({
+      strokeStyle: new ol.style.Stroke({ color: 'rgba(255,255,255,0.25)', width: 1 }),
+      showLabels: true,
+      lonLabelStyle: new ol.style.Text({
+        font: '11px sans-serif',
+        fill: new ol.style.Fill({ color: 'rgba(255,255,255,0.7)' }),
+      }),
+      latLabelStyle: new ol.style.Text({
+        font: '11px sans-serif',
+        fill: new ol.style.Fill({ color: 'rgba(255,255,255,0.7)' }),
+      }),
+      wrapX: false,
+    });
+
+    const map = new ol.Map({
+      target: 'map',
+      layers: [landLayer, graticule],
+      view: new ol.View({
+        projection: projection,
+        center: [0, 0], // the North Pole
+        resolutions: resolutions,
+        zoom: 2,
+        extent: extent,
+        constrainOnlyCenter: true,
+      }),
+    });
+  </script>
+</body>
+</html>

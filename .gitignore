@@ -1,0 +1,3 @@
+# local data (shapefiles etc.) stays out of git
+data/*
+!data/.gitkeep

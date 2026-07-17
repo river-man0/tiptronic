@@ -1,0 +1,42 @@
+services:
+  db:
+    build: ./db
+    image: localhost/tiptronic-db
+    environment:
+      POSTGRES_USER: gis
+      POSTGRES_PASSWORD: gis
+      POSTGRES_DB: gis
+    ports:
+      # Exposed so you can load data from the host (QGIS, ogr2ogr, psql, ...)
+      - "5432:5432"
+    volumes:
+      # Persistent database storage
+      - pgdata:/var/lib/postgresql/data
+      # Drop shapefiles etc. here to reach them from inside the container
+      - ./data:/data:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gis -d gis"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  bbox:
+    image: docker.io/sourcepole/bbox-server-qgis:v0.6.2
+    depends_on:
+      db:
+        condition: service_healthy
+    # podman-compose does not always honor `condition: service_healthy`;
+    # restart until the database accepts connections.
+    restart: on-failure
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./bbox/bbox.toml:/bbox.toml:ro,z
+      - ./bbox/grids:/grids:ro,z
+      - ./viewer:/viewer:ro,z
+      # Persistent tile cache
+      - tilecache:/tilecache
+
+volumes:
+  pgdata:
+  tilecache:

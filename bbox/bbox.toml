@@ -1,0 +1,53 @@
+[webserver]
+server_addr = "0.0.0.0:8080"
+
+# --- Data source -------------------------------------------------------------
+
+[[datasource]]
+name = "gisdb"
+[datasource.postgis]
+url = "postgresql://gis:gis@db:5432/gis"
+
+# --- Custom tiling scheme for EPSG:3573 (WGS 84 / North Pole LAEA Canada) ----
+# Quadratic OGC TileMatrixSet centered on the North Pole. Level 0 is a single
+# 256px tile spanning the whole northern hemisphere (grid edge = the equator).
+
+[[grid]]
+json = "/grids/EPSG3573Quad.json"
+
+# --- Tile cache ---------------------------------------------------------------
+# Rendered tiles are written here on first request and served from disk
+# afterwards (mounted as a persistent volume in docker-compose.yml).
+
+[[tilecache]]
+name = "filecache"
+[tilecache.files]
+base_dir = "/tilecache"
+
+# --- Tileset -----------------------------------------------------------------
+
+[[tileset]]
+name = "land"
+cache = "filecache"
+[[tileset.tms]]
+id = "EPSG3573Quad"
+
+[tileset.postgis]
+datasource = "gisdb"
+attribution = "Land polygons (c) OpenStreetMap contributors, ODbL; via osmdata.openstreetmap.de"
+
+[[tileset.postgis.layer]]
+name = "land_polygons"
+table_name = "land_polygons"
+geometry_field = "geom"
+srid = 4326
+buffer_size = 4
+simplify = true
+make_valid = true
+
+# --- Static assets: OpenLayers viewer -----------------------------------------
+# Served at http://localhost:8080/viewer/index.html
+
+[[assets.static]]
+dir = "/viewer"
+path = "/viewer"
