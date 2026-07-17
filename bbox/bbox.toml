@@ -36,14 +36,16 @@ id = "EPSG3573Quad"
 datasource = "gisdb"
 attribution = "Land polygons (c) OpenStreetMap contributors, ODbL; via osmdata.openstreetmap.de"
 
+# Served from land_polygons_opt (see db/optimize.sql): the raw polygons
+# subdivided into small, index-friendly pieces. make_valid is unnecessary
+# because ST_Subdivide already emits valid geometry.
 [[tileset.postgis.layer]]
 name = "land_polygons"
-table_name = "land_polygons"
+table_name = "land_polygons_opt"
 geometry_field = "geom"
 srid = 4326
 buffer_size = 4
 simplify = true
-make_valid = true
 
 # --- Static assets: OpenLayers viewer -----------------------------------------
 # Served at http://localhost:8080/viewer/index.html

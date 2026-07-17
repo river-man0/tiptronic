@@ -65,24 +65,32 @@ podman compose exec db sh -c \
   'shp2pgsql -s 4326 -I -D -g geom /data/land-polygons-complete-4326/land_polygons.shp public.land_polygons | psql -q -U gis -d gis'
 ```
 
-The grid only covers the northern hemisphere, and polygons that lie entirely
-south of the equator reproject badly into EPSG:3573 — Antarctica surrounds the
-projection's singularity (the south pole) and blows up into a blob covering
-the whole map. Drop them:
+**4. Build the tile source (`db/optimize.sql`)**
 
 ```sh
-podman compose exec db psql -U gis -d gis \
-  -c 'DELETE FROM land_polygons WHERE ST_YMax(geom) <= 0;' \
-  -c 'VACUUM ANALYZE land_polygons;'
+podman compose exec -T db psql -U gis -d gis < db/optimize.sql
+podman compose restart bbox
 ```
 
-**4. Open the viewer**
+This one step does two things and is what BBOX actually serves (see
+[Performance](#performance) for the why):
+
+- **Drops southern polygons.** The grid only covers the northern hemisphere,
+  and anything entirely south of the equator reprojects badly into EPSG:3573 —
+  Antarctica surrounds the projection's south-pole singularity and blows up
+  into a blob covering the whole map.
+- **Subdivides the giant coastline polygons** into small, index-friendly pieces
+  (`ST_Subdivide`), turning per-tile queries from seconds into milliseconds.
+
+Re-run it any time you reload `land_polygons`.
+
+**5. Open the viewer**
 
 <http://localhost:8080/viewer/index.html>
 
-The first visit renders tiles from the database (the planet-wide land polygons
-make low zooms slow the first time); after that they come straight from the
-cache.
+The first visit to each tile renders from the database, then it comes straight
+from the cache. Pre-render the low zooms to make the first look instant — see
+[Cache management](#cache-management).
 
 ## Endpoints
 
@@ -99,7 +107,31 @@ Put files in `data/` (mounted read-only at `/data` in the db container) and
 load them with `shp2pgsql` as above, or connect to `localhost:5432` with
 ogr2ogr/QGIS. Then add a `[[tileset.postgis.layer]]` (or a new `[[tileset]]`)
 in `bbox/bbox.toml`, set `srid` to your data's SRID — BBOX reprojects to the
-grid CRS automatically — and restart: `podman compose restart bbox`.
+grid CRS automatically — and restart: `podman compose restart bbox`. If a layer
+has large, dense polygons, subdivide it the way `db/optimize.sql` does the land
+layer.
+
+## Performance
+
+Raw OSM land polygons are slow to serve because a few rows hold enormous
+multipolygons (a whole continent's coastline as one geometry). Their bounding
+box covers most of the map, so the spatial index is useless — Postgres returns
+them for nearly every tile and re-clips millions of vertices each time.
+
+`db/optimize.sql` runs `ST_Subdivide` to break every polygon into pieces of at
+most 256 vertices, then GiST-indexes and `CLUSTER`s the result. Small pieces
+have tight bounding boxes, so the index becomes selective. Measured on the
+test data:
+
+| tile | before | after |
+| --- | --- | --- |
+| low zoom (z2 quadrant) | ~6.8 s | ~0.19 s |
+| high zoom (indexed) | seq scan | ~0.8 ms |
+| seed z0–6 | minutes | ~90 s |
+
+The z0–z2 tiles stay comparatively heavy (z0 is a single tile holding the
+entire hemisphere's coastline) — but there are only 21 of them, so seeding
+pins them once.
 
 ## Cache management
 
