@@ -18,6 +18,10 @@ North Pole LAEA Canada) tiling scheme.
   PostGIS on a custom polar tile grid and caches every rendered tile in the
   persistent `tilecache` volume, so tiles are only generated once.
 - **OpenLayers** static viewer with a matching EPSG:3573 projection/tile grid.
+  Fully self-contained: OpenLayers and proj4 are vendored in `viewer/vendor/`,
+  so nothing is fetched from the internet at runtime.
+
+![Viewer: land polygons on the EPSG:3573 grid](docs/viewer-hemisphere.png)
 
 ## The EPSG:3573 tiling scheme
 
@@ -34,7 +38,8 @@ quadratic and centered on the North Pole:
 ## Quick start
 
 Requires Podman with `podman compose` (podman-compose or the docker-compose
-provider).
+provider). The stack is runtime-agnostic — with Docker, substitute
+`docker compose` in the commands below.
 
 **1. Start the stack**
 
@@ -58,7 +63,17 @@ unzip land-polygons-complete-4326.zip -d data/
 ```sh
 podman compose exec db sh -c \
   'shp2pgsql -s 4326 -I -D -g geom /data/land-polygons-complete-4326/land_polygons.shp public.land_polygons | psql -q -U gis -d gis'
-podman compose exec db psql -U gis -d gis -c 'ANALYZE land_polygons;'
+```
+
+The grid only covers the northern hemisphere, and polygons that lie entirely
+south of the equator reproject badly into EPSG:3573 — Antarctica surrounds the
+projection's singularity (the south pole) and blows up into a blob covering
+the whole map. Drop them:
+
+```sh
+podman compose exec db psql -U gis -d gis \
+  -c 'DELETE FROM land_polygons WHERE ST_YMax(geom) <= 0;' \
+  -c 'VACUUM ANALYZE land_polygons;'
 ```
 
 **4. Open the viewer**
@@ -91,8 +106,10 @@ grid CRS automatically — and restart: `podman compose restart bbox`.
 Tiles are cached on first request. To pre-render (seed) low zooms:
 
 ```sh
-podman compose exec bbox bbox-server seed --tileset=land --maxzoom=6
+podman compose exec bbox bbox-app seed --tileset=land --maxzoom=6
 ```
+
+Cached tiles land in the `tilecache` volume as `land/{z}/{x}/{y}.pbf`.
 
 After changing data or style-relevant config, clear the cache:
 

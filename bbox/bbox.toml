@@ -19,9 +19,9 @@ json = "/grids/EPSG3573Quad.json"
 # Rendered tiles are written here on first request and served from disk
 # afterwards (mounted as a persistent volume in docker-compose.yml).
 
-[[tilecache]]
+[[tilestore]]
 name = "filecache"
-[tilecache.files]
+[tilestore.files]
 base_dir = "/tilecache"
 
 # --- Tileset -----------------------------------------------------------------
